@@ -40,6 +40,8 @@ void UI_GenerateChannelString(char *pString, const uint16_t Channel)
     pString[2] = '-';
     for (i = 0; i < 2; i++)
         pString[i + 3] = (gInputBox[i] == 10) ? '-' : gInputBox[i] + '0';
+
+    pString[5] = 0;
 }
 
 void UI_GenerateChannelStringEx(char *pString, const bool bShowPrefix, const uint16_t ChannelNumber)

@@ -1604,7 +1604,7 @@ static void ShowChannelName(uint32_t f)
         if (f != channelF) {
             channelF = f;
             unsigned int i;
-            memset(channelName, 0, sizeof(channelName));
+            channelName[0] = 0;
             for (i = 0; IS_MR_CHANNEL(i); i++)
             {
                 if (RADIO_CheckValidChannel(i, false, 0))
@@ -1715,16 +1715,7 @@ static bool SpectrumColumnAtOrAboveY(const uint8_t *topY, uint8_t x, uint8_t y)
 
 static uint8_t GetScanStepTextWidth()
 {
-    uint16_t whole = GetScanStep() / 100;
-    uint8_t digits = 1;
-
-    while (whole >= 10)
-    {
-        whole /= 10;
-        digits++;
-    }
-
-    return (digits + 4) * 4; // "%u.%02uk", 4 px advance per char
+    return (sprintf(NULL, "%u", GetScanStep() / 100) + 4) * 4; // "%u.%02uk", 4 px advance per char
 }
 
 static void DrawRssiTriggerLevel(const uint8_t *topY)

@@ -99,8 +99,8 @@ void UI_DisplayStatus()
 
                 if(gEeprom.SCAN_LIST_DEFAULT == MR_CHANNELS_LIST + 1)
                 {
-                    sprintf(str, gEeprom.SCAN_LIST_ENABLED ? "%s+" : "%s", "ALL");
-                    end = gEeprom.SCAN_LIST_ENABLED ? 18 : 14;
+                    strcpy(str, "ALL");
+                    end = 14;
                 }
                 else
                 {
@@ -108,13 +108,17 @@ void UI_DisplayStatus()
 
                     // Check if name is valid
                     if (!IsEmptyName(name, sizeof(gListName[0]))) {
-                        sprintf(str, "%.3s%s", name, gEeprom.SCAN_LIST_ENABLED ? "+" : "");
-                        end = gEeprom.SCAN_LIST_ENABLED ? 18 : 14;
-                    } 
-                    else {
-                        sprintf(str, "%02d%s", gEeprom.SCAN_LIST_DEFAULT, gEeprom.SCAN_LIST_ENABLED ? "+" : "");
-                        end = gEeprom.SCAN_LIST_ENABLED ? 14 : 10;
+                        sprintf(str, "%.3s", name);
+                        end = 14;
+                    } else {
+                        sprintf(str, "%02d", gEeprom.SCAN_LIST_DEFAULT);
+                        end = 10;
                     }
+                }
+
+                if (gEeprom.SCAN_LIST_ENABLED) {
+                    strcat(str, "+");
+                    end += 4;
                 }
 
                 GUI_DisplaySmallest(str, 2, 1, true, true);

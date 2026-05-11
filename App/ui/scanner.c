@@ -26,7 +26,7 @@
 
 void UI_DisplayScanner(void)
 {
-    char  String[16] = {0};
+    char  String[16];
     char *pPrintStr = String;
     bool bCentered;
     uint8_t Start;
@@ -53,7 +53,6 @@ void UI_DisplayScanner(void)
     }
 
     UI_PrintString(pPrintStr, 2, 0, 3, 8);
-    memset(String, 0, sizeof(String));
     if (gScannerSaveState == SCAN_SAVE_CHANNEL) {
         pPrintStr = "SAVE?";
         Start     = 0;
@@ -68,7 +67,9 @@ void UI_DisplayScanner(void)
             pPrintStr = String;
         } else if (gScanCssState < SCAN_CSS_STATE_FOUND) {
             strcpy(String, "SCAN");
-            memset(String + 4, '.', (gScanProgressIndicator & 7) + 1);
+            uint8_t dotCount = (gScanProgressIndicator & 7) + 1; 
+            memset(String + 4, '.', dotCount); 
+            String[4 + dotCount] = '\0'; 
             pPrintStr = String;
         } else if (gScanCssState == SCAN_CSS_STATE_FOUND) {
             pPrintStr = "SCAN CMP.";

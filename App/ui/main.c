@@ -321,16 +321,9 @@ static void ScanProgress_DrawGaugeLine(uint8_t line, uint32_t current_index, uin
     }
 }
 
-static uint8_t ScanProgress_DecimalDigits(uint32_t value)
+static inline uint8_t ScanProgress_DecimalDigits(uint32_t value)
 {
-    uint8_t digits = 1;
-
-    while (value >= 10u) {
-        value /= 10u;
-        digits++;
-    }
-
-    return digits;
+    return sprintf(NULL, "%u", value);
 }
 
 static void ScanProgress_FormatIndex(char *out, size_t out_size, uint32_t current_index, uint32_t total, uint8_t width)
