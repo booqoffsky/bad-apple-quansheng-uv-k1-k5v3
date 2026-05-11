@@ -173,7 +173,7 @@ extern const char* const            gSubMenu_TXP[8];
 extern const char* const            gSubMenu_SFT_D[3];
 extern const char* const            gSubMenu_W_N[2];
 extern const char* const            gSubMenu_OFF_ON[2];
-extern const char* const            gSubMenu_NA[1];
+extern const char*                  gSubMenu_NA;
 extern const char* const            gSubMenu_TOT[11];
 extern const char* const            gSubMenu_RXMode[4];
 
@@ -232,13 +232,13 @@ extern const char* const            gSubMenu_SET_NAV[2];
     extern const char* const        gSubMenu_SCRAMBLER[11];
 #endif
 
-typedef struct __attribute__((packed)) {
+typedef struct /* __attribute__((packed)) */ {
     const char* name; 
     uint8_t     id;
 } t_sidefunction;
 
 extern const uint8_t         gSubMenu_SIDEFUNCTIONS_size;
-extern const t_sidefunction gSubMenu_SIDEFUNCTIONS[];
+extern const t_sidefunction  gSubMenu_SIDEFUNCTIONS[];
                          
 extern bool              gIsInSubMenu;
                          

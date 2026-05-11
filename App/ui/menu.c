@@ -228,10 +228,7 @@ const char* const gSubMenu_OFF_ON[] =
     "ON"
 };
 
-const char* const gSubMenu_NA[] =
-{
-    "N/A"
-};
+const char* gSubMenu_NA = "N/A";
 
 const char* const gSubMenu_RXMode[] =
 {
