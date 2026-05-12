@@ -44,6 +44,21 @@
 #define LOGO_FLASH_ADDR     0x011000
 #define LOGO_HEADER_SIZE    8
 #define LOGO_BITMAP_ADDR    (LOGO_FLASH_ADDR + LOGO_HEADER_SIZE)
+
+static void UI_LoadLogo(void)
+{
+    // Skip 8-byte header, then read 128x64 bitmap (1024 B):
+    // page 0 -> gStatusLine, pages 1..7 -> gFrameBuffer.
+    PY25Q16_ReadBuffer(LOGO_BITMAP_ADDR, gStatusLine, sizeof(gStatusLine));
+    PY25Q16_ReadBuffer(LOGO_BITMAP_ADDR + sizeof(gStatusLine), gFrameBuffer, sizeof(gFrameBuffer));
+}
+
+void UI_DisplayLogo(void)
+{
+    UI_LoadLogo();
+    ST7565_BlitStatusLine();
+    ST7565_BlitFullScreen();
+}
 #endif
 
 #ifdef ENABLE_FEAT_F4HWN_QRCODE
@@ -240,10 +255,7 @@ void UI_DisplayWelcome(void)
 #endif
 #ifdef ENABLE_FEAT_F4HWN_LOGO
     else if (gEeprom.POWER_ON_DISPLAY_MODE == POWER_ON_DISPLAY_MODE_LOGO) {
-        // Skip 8-byte header, then read 128x64 bitmap (1024 B):
-        // page 0 -> gStatusLine, pages 1..7 -> gFrameBuffer.
-        PY25Q16_ReadBuffer(LOGO_BITMAP_ADDR, gStatusLine, sizeof(gStatusLine));
-        PY25Q16_ReadBuffer(LOGO_BITMAP_ADDR + sizeof(gStatusLine), gFrameBuffer, sizeof(gFrameBuffer));
+        UI_LoadLogo();
     }
 #endif
     else {

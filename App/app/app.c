@@ -72,11 +72,13 @@
     #include "sram-overlay.h"
 #endif
 #include "ui/battery.h"
+#include "ui/helper.h"
 #include "ui/inputbox.h"
 #include "ui/main.h"
 #include "ui/menu.h"
 #include "ui/status.h"
 #include "ui/ui.h"
+#include "ui/welcome.h"
 
 #ifdef ENABLE_FEAT_F4HWN_SCREENSHOT
     #include "screenshot.h"
@@ -85,6 +87,16 @@
 static bool flagSaveVfo;
 static bool flagSaveSettings;
 static bool flagSaveChannel;
+
+#ifdef ENABLE_FEAT_F4HWN_LOGO_SAV
+static bool gScreenSaverDisplayed;
+static uint8_t gScreenSaverMode;
+static uint8_t gScreenSaverTick;
+static uint16_t gMatrixRandom = 0xACE1;
+static uint8_t gMatrixHeads[32];
+static uint8_t gMatrixSpeeds[32];
+static KEY_Code_t gScreenSaverWakeKey = KEY_INVALID;
+#endif
 
 static void ProcessKey(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld);
 
@@ -110,10 +122,117 @@ static_assert(ARRAY_SIZE(ProcessKeysFunctions) == DISPLAY_N_ELEM-1);
 static_assert(ARRAY_SIZE(ProcessKeysFunctions) == DISPLAY_N_ELEM);
 #endif
 
+#ifdef ENABLE_FEAT_F4HWN_LOGO_SAV
+static uint8_t ScreenSaverRandom(void)
+{
+    gMatrixRandom = (uint16_t)(gMatrixRandom * 2053u + 13849u);
+    return (uint8_t)(gMatrixRandom >> 8);
+}
+
+static void ScreenSaverSetPixel(uint8_t x, uint8_t y, bool fill)
+{
+    const uint8_t pattern = 1u << (y & 7u);
+
+    if (y < 8) {
+        if (fill)
+            gStatusLine[x] |= pattern;
+        else
+            gStatusLine[x] &= (uint8_t)~pattern;
+        return;
+    }
+
+    y -= 8;
+    if (fill)
+        gFrameBuffer[y >> 3][x] |= pattern;
+    else
+        gFrameBuffer[y >> 3][x] &= (uint8_t)~pattern;
+}
+
+static void ScreenSaverDrawMatrixGlyph(uint8_t x, int16_t y, uint8_t glyph)
+{
+    static const uint8_t glyphs[][3] = {
+        {0x1F, 0x11, 0x1F},
+        {0x15, 0x1F, 0x15},
+        {0x1D, 0x15, 0x17},
+        {0x17, 0x15, 0x1D},
+        {0x1F, 0x04, 0x1F},
+        {0x1B, 0x15, 0x1B},
+        {0x0E, 0x11, 0x0E},
+        {0x11, 0x0A, 0x04}
+    };
+
+    for (uint8_t dx = 0; dx < 3; dx++) {
+        uint8_t pixels = glyphs[glyph & 7u][dx];
+        for (uint8_t dy = 0; dy < 5; dy++) {
+            const int16_t py = y + dy;
+            if ((pixels & (1u << dy)) && py >= 0 && py < LCD_HEIGHT)
+                ScreenSaverSetPixel(x + dx, (uint8_t)py, true);
+        }
+    }
+}
+
+static void ScreenSaverRenderMatrix(bool reset)
+{
+    if (reset) {
+        for (uint8_t i = 0; i < ARRAY_SIZE(gMatrixHeads); i++) {
+            gMatrixHeads[i]  = ScreenSaverRandom() % 112u;
+            gMatrixSpeeds[i] = 1u + (ScreenSaverRandom() % 3u);
+        }
+    } else {
+        for (uint8_t i = 0; i < ARRAY_SIZE(gMatrixHeads); i++) {
+            gMatrixHeads[i] += gMatrixSpeeds[i];
+            if (gMatrixHeads[i] > 112u)
+                gMatrixHeads[i] = ScreenSaverRandom() & 0x0Fu;
+        }
+    }
+
+    UI_StatusClear();
+    UI_DisplayClear();
+
+    for (uint8_t col = 0; col < ARRAY_SIZE(gMatrixHeads); col++) {
+        const uint8_t x = col * 4u;
+        for (uint8_t trail = 0; trail < 8; trail++) {
+            const int16_t y = (int16_t)gMatrixHeads[col] - ((int16_t)trail * 7);
+            const uint8_t glyph = (uint8_t)(col + trail + gMatrixHeads[col]);
+
+            if (trail == 0) {
+                ScreenSaverDrawMatrixGlyph(x, y, glyph);
+            } else if ((trail < 4) || ((glyph & 1u) != 0)) {
+                ScreenSaverDrawMatrixGlyph(x, y, glyph);
+            }
+        }
+    }
+
+    ST7565_BlitStatusLine();
+    ST7565_BlitFullScreen();
+}
+
+static void ScreenSaverExit(void)
+{
+    if (gScreenSaverDisplayed) {
+        gScreenSaverDisplayed = false;
+        gUpdateDisplay = true;
+    }
+}
+#endif
+
+bool APP_IsScreenSaverDisplayed(void)
+{
+#ifdef ENABLE_FEAT_F4HWN_LOGO_SAV
+    return gScreenSaverDisplayed;
+#else
+    return false;
+#endif
+}
+
 static void CheckForIncoming(void)
 {
     if (!g_SquelchLost)
         return;          // squelch is closed
+
+#ifdef ENABLE_FEAT_F4HWN_LOGO_SAV
+    ScreenSaverExit();
+#endif
 
     // squelch is open
 
@@ -494,6 +613,10 @@ static void HandleFunction(void)
 void APP_StartListening(FUNCTION_Type_t function)
 {
     const unsigned int vfo = gEeprom.RX_VFO;
+
+#ifdef ENABLE_FEAT_F4HWN_LOGO_SAV
+    ScreenSaverExit();
+#endif
 
 #ifdef ENABLE_FEAT_F4HWN_RX_TX_TIMER
     gRxTimerCountdown_500ms = 7200;
@@ -1414,6 +1537,23 @@ void APP_TimeSlice10ms(void)
     bool gUpdateDisplayCurrent = gUpdateDisplay;
     bool gUpdateStatusCurrent  = gUpdateStatus;
 
+#ifdef ENABLE_FEAT_F4HWN_LOGO_SAV
+    if (gScreenSaverDisplayed && gUpdateDisplayCurrent) {
+        gUpdateDisplayCurrent = false;
+        gUpdateDisplay = false;
+    } else if (gScreenSaverDisplayed && gUpdateStatusCurrent) {
+        gUpdateStatusCurrent = false;
+        gUpdateStatus = false;
+    }
+
+    if (gScreenSaverDisplayed && gScreenSaverMode == SET_SAV_MATRIX && !gUpdateDisplayCurrent) {
+        if (++gScreenSaverTick >= 8u) {
+            gScreenSaverTick = 0;
+            ScreenSaverRenderMatrix(false);
+        }
+    }
+#endif
+
     if (gUpdateDisplayCurrent) {
         gUpdateDisplay = false;
         GUI_DisplayScreen();
@@ -1634,6 +1774,20 @@ void APP_TimeSlice500ms(void)
         && gEeprom.BACKLIGHT_TIME < 61
     ) {
         BACKLIGHT_TurnOff();
+#ifdef ENABLE_FEAT_F4HWN_LOGO_SAV
+        if (gSetting_set_sav != SET_SAV_OFF && gScreenToDisplay == DISPLAY_MAIN) {
+            if (gSetting_set_sav == SET_SAV_LOGO)
+                UI_DisplayLogo();
+            else if (gSetting_set_sav == SET_SAV_MATRIX)
+                ScreenSaverRenderMatrix(true);
+
+            gScreenSaverDisplayed = true;
+            gScreenSaverMode = gSetting_set_sav;
+            gScreenSaverTick = 0;
+            gUpdateDisplay = false;
+            gUpdateStatus = false;
+        }
+#endif
     }
 
 #ifdef ENABLE_FEAT_F4HWN_SLEEP
@@ -1894,6 +2048,24 @@ static void ProcessKey(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
         }
     }
     #endif
+
+#ifdef ENABLE_FEAT_F4HWN_LOGO_SAV
+    if (gScreenSaverWakeKey != KEY_INVALID) {
+        if (Key == gScreenSaverWakeKey && !bKeyPressed)
+            gScreenSaverWakeKey = KEY_INVALID;
+        return;
+    }
+
+    if (bKeyPressed && gScreenSaverDisplayed) {
+        ScreenSaverExit();
+        BACKLIGHT_TurnOn();
+        if (Key != KEY_PTT) {
+            gScreenSaverWakeKey = Key;
+            gBeepToPlay = BEEP_NONE;
+            return;
+        }
+    }
+#endif
 
     if (Key == KEY_EXIT && !BACKLIGHT_IsOn() && gEeprom.BACKLIGHT_TIME > 0)
     {   // just turn the light on for now so the user can see what's what

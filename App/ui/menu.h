@@ -163,7 +163,10 @@ enum
     MENU_F2SHRT,
     MENU_F2LONG,
     MENU_MLONG,
-    MENU_BATTYP
+    MENU_BATTYP,
+#if defined(ENABLE_FEAT_F4HWN) && defined(ENABLE_FEAT_F4HWN_LOGO_SAV)
+    MENU_SET_SAV
+#endif
 };
 
 extern const uint8_t FIRST_HIDDEN_MENU_ITEM;
@@ -206,6 +209,9 @@ extern const char* const            gSubMenu_D_RSP[4];
     #ifdef ENABLE_FEAT_F4HWN_AUDIO
         extern const char* const    gSubMenu_SET_AUD_FM[5];
         extern const char* const    gSubMenu_SET_AUD_AM[3];
+    #endif
+    #ifdef ENABLE_FEAT_F4HWN_LOGO_SAV
+        extern const char* const    gSubMenu_SET_SAV[];
     #endif
 #endif
 

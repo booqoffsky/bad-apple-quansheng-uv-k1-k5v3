@@ -16,6 +16,7 @@
 
 #include <string.h>
 
+#include "app/app.h"
 #include "app/chFrScanner.h"
 #ifdef ENABLE_FMRADIO
     #include "app/fm.h"
@@ -59,6 +60,9 @@ void UI_DisplayStatus()
     char str[8] = "";
 
     gUpdateStatus = false;
+    if (APP_IsScreenSaverDisplayed())
+        return;
+
     UI_StatusClear();
 
     uint8_t     *line = gStatusLine;

@@ -171,6 +171,9 @@ const t_menu_item MenuList[] =
 #ifdef ENABLE_FEAT_F4HWN_SCAN_FASTER
     {"SetScn",      MENU_SET_SCN       },
 #endif
+#ifdef ENABLE_FEAT_F4HWN_LOGO_SAV
+    {"SetSav",      MENU_SET_SAV       },
+#endif
 #endif
     // hidden menu items from here on
     // enabled if pressing both the PTT and upper side button at power-on
@@ -297,6 +300,15 @@ const char* const gSubMenu_PONMSG[] =
 #endif
     "NONE"
 };
+
+#if defined(ENABLE_FEAT_F4HWN) && defined(ENABLE_FEAT_F4HWN_LOGO_SAV)
+const char* const gSubMenu_SET_SAV[] =
+{
+    "OFF",
+    "LOGO",
+    "MATRIX"
+};
+#endif
 
 const char* const gSubMenu_ROGER[] =
 {
@@ -917,6 +929,12 @@ void UI_DisplayMenu(void)
 #endif
             strcpy(String, gSubMenu_OFF_ON[gSubMenuSelection]);
             break;
+
+#if defined(ENABLE_FEAT_F4HWN) && defined(ENABLE_FEAT_F4HWN_LOGO_SAV)
+        case MENU_SET_SAV:
+            strcpy(String, gSubMenu_SET_SAV[gSubMenuSelection]);
+            break;
+#endif
 
         case MENU_MEM_CH:
         case MENU_1_CALL:
