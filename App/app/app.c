@@ -1789,6 +1789,7 @@ void APP_TimeSlice500ms(void)
         if (gSetting_set_sav != SET_SAV_OFF &&
             gScreenToDisplay == DISPLAY_MAIN &&
             gCurrentFunction != FUNCTION_TRANSMIT &&
+            !FUNCTION_IsRx() &&
             !gPttIsPressed)
         {
             if (gSetting_set_sav == SET_SAV_LOGO)

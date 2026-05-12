@@ -17,6 +17,7 @@
 #include <string.h>
 #include <stdlib.h>  // abs()
 
+#include "app/app.h"
 #include "app/chFrScanner.h"
 #include "app/dtmf.h"
 
@@ -846,6 +847,8 @@ void UI_DisplayAudioScope(void)
 void DisplayRSSIBar(const bool now)
 {
 #if defined(ENABLE_RSSI_BAR)
+    if (APP_IsScreenSaverDisplayed())
+        return;
 
     const unsigned int txt_width    = 7 * 8;                 // 8 text chars
     const unsigned int bar_x        = 2 + txt_width + 4;     // X coord of bar graph
