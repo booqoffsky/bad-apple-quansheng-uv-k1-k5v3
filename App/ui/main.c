@@ -895,13 +895,17 @@ void DisplayRSSIBar(const bool now)
                 p_line0[i] = (p_line0[i] & 0x80) | BITMAP_VFO_Empty[i];
         }
 
-        ST7565_BlitLine(RxLine);
+        ST7565_DrawLine(0, RxLine + 1, p_line0, sizeof(BITMAP_VFO_Default));
     }
+
 #else
     const unsigned int line = 3;
 #endif
     uint8_t           *p_line        = gFrameBuffer[line];
     char               str[16];
+#ifdef ENABLE_FEAT_F4HWN
+    uint8_t            oldLine[LCD_WIDTH];
+#endif
 
 #ifndef ENABLE_FEAT_F4HWN
     const char plus[] = {
@@ -926,8 +930,15 @@ void DisplayRSSIBar(const bool now)
         )
         return;     // display is in use
 
+#ifdef ENABLE_FEAT_F4HWN
+    if (now) {
+        memcpy(oldLine, p_line, LCD_WIDTH);
+        memset(p_line, 0, LCD_WIDTH);
+    }
+#else
     if (now)
         memset(p_line, 0, LCD_WIDTH);
+#endif
 
 #ifdef ENABLE_FEAT_F4HWN
     int16_t rssi_dBm =
@@ -1017,8 +1028,13 @@ void DisplayRSSIBar(const bool now)
     UI_PrintStringSmallNormal(str, 2, 0, line);
 #endif
     DrawLevelBar(bar_x, line, s_level + overS9Bars, 13);
+#ifdef ENABLE_FEAT_F4HWN
+    if (now && memcmp(oldLine, p_line, LCD_WIDTH) != 0)
+        ST7565_BlitLine(line);
+#else
     if (now)
         ST7565_BlitLine(line);
+#endif
 #else
     int16_t rssi = BK4819_GetRSSI();
     uint8_t Level;
