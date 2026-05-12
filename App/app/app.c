@@ -1703,6 +1703,17 @@ void APP_TimeSlice500ms(void)
         if (--gKeypadLocked == 0)
             gUpdateDisplay = true;
 
+#ifdef ENABLE_FEAT_F4HWN_RX_TX_TIMER
+    if (gSetting_set_tmr && (gCurrentFunction == FUNCTION_TRANSMIT || FUNCTION_IsRx())) {
+        const uint16_t timerCountdown = (gCurrentFunction == FUNCTION_TRANSMIT)
+            ? gTxTimerCountdown_500ms
+            : gRxTimerCountdown_500ms;
+
+        if ((timerCountdown & 1u) != 0u)
+            gUpdateStatus = true;
+    }
+#endif
+
     if (gKeyInputCountdown > 0)
     {
         if (--gKeyInputCountdown == 0)

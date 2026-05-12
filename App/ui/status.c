@@ -49,8 +49,6 @@ static void convertTime(uint8_t *line, uint8_t type)
     char str[6];
     sprintf(str, "%02u:%02u", m, s);
     UI_PrintStringSmallBufferNormal(str, line);
-
-    gUpdateStatus = true;
 }
 #endif
 #endif
