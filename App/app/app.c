@@ -207,11 +207,51 @@ static void ScreenSaverRenderMatrix(bool reset)
     ST7565_BlitFullScreen();
 }
 
+static bool ScreenSaverCanDisplay(void)
+{
+    if (gSetting_set_sav == SET_SAV_OFF ||
+        gScreenSaverDisplayed ||
+        gCurrentFunction == FUNCTION_TRANSMIT ||
+        FUNCTION_IsRx() ||
+        gPttIsPressed)
+    {
+        return false;
+    }
+
+    if (gScreenToDisplay == DISPLAY_MAIN)
+        return true;
+
+#ifdef ENABLE_FMRADIO
+    if (gScreenToDisplay == DISPLAY_FM)
+        return true;
+#endif
+
+    return false;
+}
+
+static void ScreenSaverTryDisplay(void)
+{
+    if (!ScreenSaverCanDisplay())
+        return;
+
+    if (gSetting_set_sav == SET_SAV_LOGO)
+        UI_DisplayLogo();
+    else if (gSetting_set_sav == SET_SAV_MATRIX)
+        ScreenSaverRenderMatrix(true);
+
+    gScreenSaverDisplayed = true;
+    gScreenSaverMode = gSetting_set_sav;
+    gScreenSaverTick = 0;
+    gUpdateDisplay = false;
+    gUpdateStatus = false;
+}
+
 static void ScreenSaverExit(void)
 {
     if (gScreenSaverDisplayed) {
         gScreenSaverDisplayed = false;
         gUpdateDisplay = true;
+        gUpdateStatus = true;
     }
 }
 #endif
@@ -1786,23 +1826,7 @@ void APP_TimeSlice500ms(void)
     ) {
         BACKLIGHT_TurnOff();
 #ifdef ENABLE_FEAT_F4HWN_LOGO_SAV
-        if (gSetting_set_sav != SET_SAV_OFF &&
-            gScreenToDisplay == DISPLAY_MAIN &&
-            gCurrentFunction != FUNCTION_TRANSMIT &&
-            !FUNCTION_IsRx() &&
-            !gPttIsPressed)
-        {
-            if (gSetting_set_sav == SET_SAV_LOGO)
-                UI_DisplayLogo();
-            else if (gSetting_set_sav == SET_SAV_MATRIX)
-                ScreenSaverRenderMatrix(true);
-
-            gScreenSaverDisplayed = true;
-            gScreenSaverMode = gSetting_set_sav;
-            gScreenSaverTick = 0;
-            gUpdateDisplay = false;
-            gUpdateStatus = false;
-        }
+        ScreenSaverTryDisplay();
 #endif
     }
 
@@ -1984,6 +2008,16 @@ void APP_TimeSlice500ms(void)
         }
 #endif
     }
+
+#ifdef ENABLE_FEAT_F4HWN_LOGO_SAV
+    if (gBacklightCountdown_500ms == 0 &&
+        gEeprom.BACKLIGHT_TIME < 61 &&
+        !gAskToSave &&
+        !gCssBackgroundScan)
+    {
+        ScreenSaverTryDisplay();
+    }
+#endif
 
     BATTERY_TimeSlice500ms();
     SCANNER_TimeSlice500ms();
