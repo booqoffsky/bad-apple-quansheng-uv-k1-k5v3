@@ -26,50 +26,56 @@
 
 void UI_DisplayScanner(void)
 {
-    char Line1[16];
-    char Line2[16];
-    char Line3[16];
-    const bool searching = (gScanCssState < SCAN_CSS_STATE_FOUND);
-    const bool blinkOff  = searching && ((gScanProgressIndicator & 1u) != 0);
+    char String[16];
+    char *pPrintStr = String;
 
     UI_DisplayClear();
 
-    if (gScanSingleFrequency || (gScanCssState != SCAN_CSS_STATE_OFF && gScanCssState != SCAN_CSS_STATE_FAILED)) {
-        sprintf(Line2, "Freq:%u.%05u", gScanFrequency / 100000, gScanFrequency % 100000);
-    } else {
-        strcpy(Line2, "Freq:---.-----");
-    }
-
+    // 1st line
     if (gScannerSaveState == SCAN_SAVE_CHANNEL) {
-        strcpy(Line1, "Save?");
+        pPrintStr = "Save?";
     } else if (gScannerSaveState == SCAN_SAVE_CHAN_SEL) {
-        strcpy(Line1, "Save:");
-        UI_GenerateChannelStringEx(Line1 + 5, gShowChPrefix, gScanChannel);
-    } else if (blinkOff) {
-        Line1[0] = '\0';
+        strcpy(String, "Save:");
+        UI_GenerateChannelStringEx(String + 5, gShowChPrefix, gScanChannel);
+        pPrintStr = String;
+    } else if ((gScanCssState < SCAN_CSS_STATE_FOUND) && ((gScanProgressIndicator & 1u) != 0)) {
+        pPrintStr = "";
     } else if (gScanCssState == SCAN_CSS_STATE_OFF) {
-        strcpy(Line1, "Search Freq");
+        pPrintStr = "Search Freq";
     } else if (gScanCssState == SCAN_CSS_STATE_SCANNING) {
-        strcpy(Line1, "Search Tone");
+        pPrintStr = "Search Tone";
     } else if (gScanCssState == SCAN_CSS_STATE_FOUND) {
-        strcpy(Line1, "Scan Complete");
+        pPrintStr = "Scan Complete";
     } else {
-        strcpy(Line1, "Scan Failed");
+        pPrintStr = "Scan Failed";
     }
 
+    UI_PrintString(pPrintStr, 2, 0, 1, 8);
+
+    // 2nd line
+    if (gScanSingleFrequency || (gScanCssState != SCAN_CSS_STATE_OFF && gScanCssState != SCAN_CSS_STATE_FAILED)) {
+        sprintf(String, "Freq:%u.%05u", gScanFrequency / 100000, gScanFrequency % 100000);
+        pPrintStr = String;
+    } else {
+        pPrintStr = "Freq:---.-----";
+    }
+
+    UI_PrintString(pPrintStr, 2, 0, 3, 8);
+
+    // 3rd line
     if (gScanCssState < SCAN_CSS_STATE_FOUND) {
-        strcpy(Line3, "Tone:---");
+        pPrintStr = "Tone:---";
     } else if (!gScanUseCssResult) {
-        strcpy(Line3, "Tone:None");
+        pPrintStr = "Tone:None";
     } else if (gScanCssResultType == CODE_TYPE_CONTINUOUS_TONE) {
-        sprintf(Line3, "CTCSS:%u.%uHz", CTCSS_Options[gScanCssResultCode] / 10, CTCSS_Options[gScanCssResultCode] % 10);
+        sprintf(String, "CTCSS:%u.%uHz", CTCSS_Options[gScanCssResultCode] / 10, CTCSS_Options[gScanCssResultCode] % 10);
+        pPrintStr = String;
     } else {
-        sprintf(Line3, "DCS:D%03oN", DCS_Options[gScanCssResultCode]);
+        sprintf(String, "DCS:D%03oN", DCS_Options[gScanCssResultCode]);
+        pPrintStr = String;
     }
-
-    UI_PrintString(Line1, 2, 0, 1, 8);
-    UI_PrintString(Line2, 2, 0, 3, 8);
-    UI_PrintString(Line3, 2, 0, 5, 8);
+ 
+    UI_PrintString(pPrintStr, 2, 0, 5, 8);
 
     ST7565_BlitFullScreen();
 }
