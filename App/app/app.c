@@ -241,7 +241,11 @@ static bool ScreenSaverCanDisplay(void)
         gScreenSaverDisplayed ||
         gCurrentFunction == FUNCTION_TRANSMIT ||
         FUNCTION_IsRx() ||
-        gPttIsPressed)
+        gPttIsPressed
+#ifdef ENABLE_FEAT_F4HWN_BEAM
+        || gBeamActive
+#endif
+        )
     {
         return false;
     }
