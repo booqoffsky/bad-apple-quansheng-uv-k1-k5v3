@@ -233,6 +233,13 @@ static void ScreenSaverRenderLogoPlus(bool reset)
     ST7565_BlitFullScreen();
 }
 
+static void ScreenSaverUpdateViewer(void)
+{
+#ifdef ENABLE_FEAT_F4HWN_SCREENSHOT
+    SCREENSHOT_Update(false);
+#endif
+}
+
 static bool ScreenSaverCanDisplay(void)
 {
     if (gSetting_set_sav == SET_SAV_OFF ||
@@ -280,6 +287,7 @@ static void ScreenSaverTryDisplay(void)
     gScreenSaverTick = 0;
     gUpdateDisplay = false;
     gUpdateStatus = false;
+    ScreenSaverUpdateViewer();
 }
 
 static void ScreenSaverExit(void)
@@ -1618,6 +1626,8 @@ void APP_TimeSlice10ms(void)
     }
 
 #ifdef ENABLE_FEAT_F4HWN_LOGO_SAV
+    bool screenSaverRendered = false;
+
     if (gScreenSaverDisplayed) {
         if (gUpdateDisplayCurrent) {
             gUpdateDisplayCurrent = false;
@@ -1630,11 +1640,13 @@ void APP_TimeSlice10ms(void)
             if (++gScreenSaverTick >= 8u) {
                 gScreenSaverTick = 0;
                 ScreenSaverRenderMatrix(false);
+                screenSaverRendered = true;
             }
         } else if (gSetting_set_sav == SET_SAV_LOGO_PLUS) {
             if (++gScreenSaverTick >= 16u) {
                 gScreenSaverTick = 0;
                 ScreenSaverRenderLogoPlus(false);
+                screenSaverRendered = true;
             }
         }
     }
@@ -1649,7 +1661,11 @@ void APP_TimeSlice10ms(void)
     }
 
     #ifdef ENABLE_FEAT_F4HWN_SCREENSHOT
-    if (gUpdateDisplayCurrent || gUpdateStatusCurrent) {
+    if (gUpdateDisplayCurrent || gUpdateStatusCurrent
+#ifdef ENABLE_FEAT_F4HWN_LOGO_SAV
+        || screenSaverRendered
+#endif
+        ) {
         SCREENSHOT_Update(false);
     }
     #endif
