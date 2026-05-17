@@ -242,6 +242,9 @@ static bool ScreenSaverCanDisplay(void)
         gCurrentFunction == FUNCTION_TRANSMIT ||
         FUNCTION_IsRx() ||
         gPttIsPressed
+#ifdef ENABLE_FMRADIO
+        || gFM_ScanState != FM_SCAN_OFF
+#endif
 #ifdef ENABLE_FEAT_F4HWN_BEAM
         || gBeamActive
 #endif
