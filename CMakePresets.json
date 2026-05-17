@@ -34,7 +34,7 @@
                 "ENABLE_BOOT_BEEPS": false,
                 "ENABLE_SHOW_CHARGE_LEVEL": false,
                 "ENABLE_REVERSE_BAT_SYMBOL": false,
-                "ENABLE_NO_CODE_SCAN_TIMEOUT": true,
+                "ENABLE_NO_CODE_SCAN_TIMEOUT": false,
                 "ENABLE_SQUELCH_MORE_SENSITIVE": true,
                 "ENABLE_FASTER_CHANNEL_SCAN": true,
                 "ENABLE_RSSI_BAR": true,
