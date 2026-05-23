@@ -625,7 +625,8 @@ void FM_Play(void)
 
         if (gFM_ChannelPosition < FM_CHANNELS_MAX)
             gFM_Channels[gFM_ChannelPosition++] = gEeprom.FM_FrequencyPlaying;
-        else {
+        
+        if (gFM_ChannelPosition >= FM_CHANNELS_MAX) {
             FM_PlayAndUpdate();
 
             goto Display;
