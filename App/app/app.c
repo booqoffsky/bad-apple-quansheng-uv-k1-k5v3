@@ -250,7 +250,7 @@ static bool ScreenSaverCanDisplay(void)
         FUNCTION_IsRx() ||
         gPttIsPressed
 #ifdef ENABLE_FMRADIO
-        || gFM_ScanState != FM_SCAN_OFF
+        || (gFM_ScanState != FM_SCAN_OFF && !gFM_FoundFrequency)
 #endif
 #ifdef ENABLE_FEAT_F4HWN_BEAM
         || gBeamActive
