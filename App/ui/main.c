@@ -140,6 +140,71 @@ const char *VfoStateStr[] = {
        [VFO_STATE_VOLTAGE_HIGH]="VOLT HIGH"
 };
 
+#if defined(ENABLE_FEAT_F4HWN_SCAN_FASTER) && defined(ENABLE_FEAT_F4HWN_SCAN_RSSI)
+static uint8_t UI_MAIN_GetScanRssiSparklineMask(uint8_t previousLevel, uint8_t level)
+{
+    uint8_t mask = 0;
+    const uint8_t bottom = 5;
+
+    if (level == 0)
+        return (uint8_t)(1u << bottom);
+
+    const uint8_t top = bottom + 1 - level;
+    uint8_t bridgeTop = top;
+    uint8_t bridgeBottom = top;
+
+    if (previousLevel > 0)
+    {
+        const uint8_t previousTop = bottom + 1 - previousLevel;
+        if (previousTop < bridgeTop)
+            bridgeTop = previousTop;
+        else if (previousTop > bridgeBottom)
+            bridgeBottom = previousTop;
+    }
+
+    // Solid crest line with a small vertical bridge to avoid broken diagonals.
+    for (uint8_t y = bridgeTop; y <= bridgeBottom; y++)
+        mask |= (uint8_t)(1u << y);
+
+    return mask;
+}
+
+static void UI_MAIN_DrawScanRssiSparkline(uint8_t line)
+{
+    uint8_t *p_line = gFrameBuffer[line];
+    const uint8_t x0 = 7;
+    uint8_t level[CHFRSCANNER_RSSI_SPARKLINE_WIDTH];
+
+    if (!CHFRSCANNER_HasScanRssiSparkline())
+        return;
+
+    for (uint8_t i = 0; i < CHFRSCANNER_RSSI_SPARKLINE_WIDTH; i++)
+        level[i] = CHFRSCANNER_GetScanRssiSparklineLevel(i);
+
+    for (uint8_t i = 0; i < CHFRSCANNER_RSSI_SPARKLINE_WIDTH; i++)
+    {
+        const uint8_t previousRaw = (i > 0) ? level[i - 1] : 0;
+        const uint8_t nextRaw = (i + 1 < CHFRSCANNER_RSSI_SPARKLINE_WIDTH) ? level[i + 1] : 0;
+        uint8_t displayLevel = (uint8_t)((previousRaw + 2u * level[i] + nextRaw + 2u) >> 2);
+        uint8_t previousLevel = previousRaw;
+
+        if (level[i] == 0 && previousRaw == 0 && nextRaw == 0)
+            displayLevel = 0;
+        else if (displayLevel == 0)
+            displayLevel = 1;
+
+        if (i > 0)
+        {
+            const uint8_t previousPreviousRaw = (i > 1) ? level[i - 2] : 0;
+            previousLevel = (uint8_t)((previousPreviousRaw + 2u * previousRaw + level[i] + 2u) >> 2);
+        }
+
+        const uint8_t mask = UI_MAIN_GetScanRssiSparklineMask(previousLevel, displayLevel);
+        p_line[x0 + i] = (p_line[x0 + i] & 0x80) | mask;
+    }
+}
+#endif
+
 #ifdef ENABLE_FEAT_F4HWN_SCAN_PROGRESS
 static void ScanProgress_ResetSession(void)
 {
@@ -1441,6 +1506,11 @@ void UI_DisplayMain(void)
             }
 #endif
         }
+
+#if defined(ENABLE_FEAT_F4HWN_SCAN_FASTER) && defined(ENABLE_FEAT_F4HWN_SCAN_RSSI)
+        if (vfo_num == gEeprom.RX_VFO && gScanStateDir != SCAN_OFF && !FUNCTION_IsRx())
+            UI_MAIN_DrawScanRssiSparkline(line);
+#endif
 
         if(TX_freq_check(frequency) != 0 && gEeprom.VfoInfo[vfo_num].TX_LOCK == true)
         {

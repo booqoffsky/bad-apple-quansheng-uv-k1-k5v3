@@ -1,5 +1,6 @@
 
 #include <stddef.h>
+#include <string.h>
 
 #include "app/app.h"
 #include "app/chFrScanner.h"
@@ -232,6 +233,65 @@ static uint32_t scanFastPrevFrequency;
 static bool     scanFastLastFullTuneCandidate;
 static VFO_Info_t scanFastDisplayVfo;
 static bool       scanFastDisplayVfoValid;
+#ifdef ENABLE_FEAT_F4HWN_SCAN_RSSI
+static uint16_t scanRssiSparkline[CHFRSCANNER_RSSI_SPARKLINE_WIDTH];
+static uint8_t  scanRssiSparklineWrite;
+static uint8_t  scanRssiSparklineCount;
+
+static void ScanRssiSparklineReset(void)
+{
+    memset(scanRssiSparkline, 0, sizeof(scanRssiSparkline));
+    scanRssiSparklineWrite = 0;
+    scanRssiSparklineCount = 0;
+}
+
+static void ScanRssiSparklinePush(uint16_t rssi)
+{
+    scanRssiSparkline[scanRssiSparklineWrite] = rssi;
+    scanRssiSparklineWrite++;
+    if (scanRssiSparklineWrite >= CHFRSCANNER_RSSI_SPARKLINE_WIDTH)
+        scanRssiSparklineWrite = 0;
+
+    if (scanRssiSparklineCount < CHFRSCANNER_RSSI_SPARKLINE_WIDTH)
+        scanRssiSparklineCount++;
+}
+
+bool CHFRSCANNER_HasScanRssiSparkline(void)
+{
+    return gScanStateDir != SCAN_OFF && scanRssiSparklineCount > 1;
+}
+
+uint8_t CHFRSCANNER_GetScanRssiSparklineLevel(uint8_t index)
+{
+    uint16_t minRssi = SCAN_FAST_RSSI_MAX;
+    uint16_t rssi = 0;
+    uint8_t oldest;
+
+    if (index >= CHFRSCANNER_RSSI_SPARKLINE_WIDTH || scanRssiSparklineCount == 0)
+        return 0;
+
+    if (index < CHFRSCANNER_RSSI_SPARKLINE_WIDTH - scanRssiSparklineCount)
+        return 0;
+
+    oldest = (uint8_t)((scanRssiSparklineWrite + CHFRSCANNER_RSSI_SPARKLINE_WIDTH - scanRssiSparklineCount)
+                       % CHFRSCANNER_RSSI_SPARKLINE_WIDTH);
+    index -= (uint8_t)(CHFRSCANNER_RSSI_SPARKLINE_WIDTH - scanRssiSparklineCount);
+
+    for (uint8_t i = 0; i < scanRssiSparklineCount; i++)
+    {
+        const uint16_t sample = scanRssiSparkline[(oldest + i) % CHFRSCANNER_RSSI_SPARKLINE_WIDTH];
+        if (sample != 0 && sample < minRssi)
+            minRssi = sample;
+    }
+
+    rssi = scanRssiSparkline[(oldest + index) % CHFRSCANNER_RSSI_SPARKLINE_WIDTH];
+    if (rssi == 0 || minRssi == SCAN_FAST_RSSI_MAX || rssi <= minRssi + 2)
+        return 0;
+
+    // 48 RSSI units ~= 24 dB. This keeps quiet jitter low while strong hits pop.
+    return (uint8_t)MIN(((uint32_t)(rssi - minRssi) * 5u + 24u) / 48u, 5u);
+}
+#endif
 
 static void ScanFastResetState(void)
 {
@@ -538,6 +598,9 @@ static scan_fast_result_t ScanRangeFastPrecheck(void)
         ScanFastTune(freq);
 
         const uint16_t rssi = ScanFastReadCandidateRssi();
+#ifdef ENABLE_FEAT_F4HWN_SCAN_RSSI
+        ScanRssiSparklinePush(rssi);
+#endif
         if (ScanFastIsCandidate(rssi))
         {
             ScanRangeFastRefineCandidate(rssi);
@@ -573,7 +636,12 @@ static bool MemChannelFastPrecheck(uint16_t channel)
     scanFastReg30 = BK4819_ReadRegister(BK4819_REG_30) & ~BK4819_REG_30_MASK_ENABLE_AF_DAC;
     ScanFastTune(frequency);
 
-    if (ScanFastIsCandidate(ScanFastReadCandidateRssi()))
+    const uint16_t rssi = ScanFastReadCandidateRssi();
+#ifdef ENABLE_FEAT_F4HWN_SCAN_RSSI
+    ScanRssiSparklinePush(rssi);
+#endif
+
+    if (ScanFastIsCandidate(rssi))
     {
         scanFastLastFullTuneCandidate = true;
         return true;  // signal detected: let the full tune path follow
@@ -637,6 +705,9 @@ void CHFRSCANNER_Start(const bool storeBackupSettings, const int8_t scan_directi
     currentScanList = SCAN_NEXT_CHAN_SCANLIST1;
     gScanStateDir    = scan_direction;
 #ifdef ENABLE_FEAT_F4HWN_SCAN_FASTER
+#ifdef ENABLE_FEAT_F4HWN_SCAN_RSSI
+    ScanRssiSparklineReset();
+#endif
     ScanFastResetState();
 #endif
 
@@ -820,6 +891,9 @@ void CHFRSCANNER_Stop(void)
     }
     
     gScanStateDir = SCAN_OFF;
+#if defined(ENABLE_FEAT_F4HWN_SCAN_FASTER) && defined(ENABLE_FEAT_F4HWN_SCAN_RSSI)
+    ScanRssiSparklineReset();
+#endif
 
     const uint32_t chFr = gScanKeepResult ? lastFoundFrqOrChan : initialFrqOrChan;
     const bool channelChanged = chFr != initialFrqOrChan;
