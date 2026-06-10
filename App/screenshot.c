@@ -22,11 +22,24 @@
 #include "driver/keyboard.h"
 
 // SRAM optimization: minimize static allocations
-// - previousFrame: 1024 bytes (REQUIRED - need to compare for delta)
-// - No currentFrame or deltaFrame static buffers
-static uint8_t previousFrame[1024] = {0};
+// - previousHash: one fingerprint per 8-byte chunk instead of a full
+//   1024-byte copy of the previous frame (chunks are only compared,
+//   never retransmitted from history). A hash collision would skip one
+//   stale chunk, which the forcedBlock rotation repairs within at most
+//   128 frames anyway.
+static uint8_t previousHash[128];
 static uint8_t forcedBlock = 0;
 static uint8_t keepAlive = 3;
+
+// FNV-1a over one 8-byte chunk, folded to 8 bits
+static uint8_t SCREENSHOT_Hash(const uint8_t *data)
+{
+    uint32_t h = 2166136261u;
+    for (uint8_t i = 0; i < 8; i++) {
+        h = (h ^ data[i]) * 16777619u;
+    }
+    return (uint8_t)(h ^ (h >> 8) ^ (h >> 16) ^ (h >> 24));
+}
 
 void SCREENSHOT_ParseInput(void)
 {
@@ -111,13 +124,13 @@ void SCREENSHOT_Update(bool force)
     // ==== FIRST PASS: Count changed chunks ====
     uint16_t deltaLen = 0;
     uint8_t changedChunks[128];  // List of changed chunk indices
+    uint8_t newHash[128];        // Fingerprints of the current frame
     uint8_t changedCount = 0;
 
     for (uint8_t chunk = 0; chunk < 128; chunk++) {
-        uint8_t *cur = &frameBuffer[chunk * 8];
-        uint8_t *prev = &previousFrame[chunk * 8];
+        newHash[chunk] = SCREENSHOT_Hash(&frameBuffer[chunk * 8]);
 
-        bool changed = memcmp(cur, prev, 8) != 0;
+        bool changed = newHash[chunk] != previousHash[chunk];
         bool isForced = (chunk == forcedBlock);
         bool fullUpdate = force;
 
@@ -157,16 +170,15 @@ void SCREENSHOT_Update(bool force)
     
     for (uint8_t i = 0; i < changedCount; i++) {
         uint8_t chunkIdx = changedChunks[i];
-        uint8_t *cur = &frameBuffer[chunkIdx * 8];
-        uint8_t *prev = &previousFrame[chunkIdx * 8];
 
         chunk[0] = chunkIdx;
-        memcpy(&chunk[1], cur, 8);
-        
+        memcpy(&chunk[1], &frameBuffer[chunkIdx * 8], 8);
+
         SCREENSHOT_Send(chunk, 9);
-        
-        // Update previousFrame for next comparison
-        memcpy(prev, cur, 8);
+
+        // Update the fingerprint only once the chunk is actually sent,
+        // so chunks skipped by an early return stay marked as changed
+        previousHash[chunkIdx] = newHash[chunkIdx];
     }
 
     uint8_t end = 0x0A;
