@@ -805,6 +805,9 @@ void RADIO_SetupRegisters(bool switchToForeground)
     #endif
     BK4819_SetFrequency(Frequency);
 
+    // Keep the demodulator in sync when retuning without entering RX audio.
+    RADIO_SetModulation(gRxVfo->Modulation);
+
     BK4819_SetupSquelch(
         gRxVfo->SquelchOpenRSSIThresh,    gRxVfo->SquelchCloseRSSIThresh,
         gRxVfo->SquelchOpenNoiseThresh,   gRxVfo->SquelchCloseNoiseThresh,
@@ -1102,7 +1105,7 @@ void RADIO_SetModulation(ModulationMode_t modulation)
                 BK4819_WriteRegister(0x55, 0x31a9);
             #endif
 
-            BK4819_SetFilterBandwidth(RADIO_GetAMFilterBandwidth(gCurrentVfo), true);
+            BK4819_SetFilterBandwidth(RADIO_GetAMFilterBandwidth(gRxVfo), true);
             break;
         }
 
