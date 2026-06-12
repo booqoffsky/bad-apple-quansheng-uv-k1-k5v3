@@ -83,8 +83,6 @@ void SCREENSHOT_Update(bool force)
     // This is 1024 bytes but it's temporary and gets freed after the function
     uint8_t frameBuffer[1024];
     uint16_t index = 0;
-    uint8_t acc = 0;
-    uint8_t bitCount = 0;
     static bool wasConnected = false;
 
     if (SCREENSHOT_IsLocked())
@@ -114,9 +112,6 @@ void SCREENSHOT_Update(bool force)
     for (uint8_t l = 0; l < 7; l++) {
         SCREENSHOT_Line(gFrameBuffer[l], frameBuffer, &index);
     }
-
-    if (bitCount > 0)
-        frameBuffer[index++] = acc;
 
     if (index != 1024)
         return;
