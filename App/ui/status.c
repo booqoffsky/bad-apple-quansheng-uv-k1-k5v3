@@ -260,7 +260,10 @@ void UI_DisplayStatus()
         }
     #endif
     else if (gBackLight) {
-        src = gFontLight;
+        // Distinguish the manual backlight sub-state: BACKLIGHT_TIME == 0
+        // means the light is currently off (hollow bulb), otherwise it is
+        // forced on (bulb with filament). Both glyphs share the same size.
+        src = (gEeprom.BACKLIGHT_TIME == 0) ? gFontLightOff : gFontLight;
         size = sizeof(gFontLight);
     }
     #ifdef ENABLE_FEAT_F4HWN_CHARGING_C
