@@ -27,6 +27,12 @@
 //   never retransmitted from history). A hash collision would skip one
 //   stale chunk, which the forcedBlock rotation repairs within at most
 //   128 frames anyway.
+// Stack optimization: chunks are computed on demand straight from
+// gStatusLine/gFrameBuffer instead of building the whole 1024-byte
+// frame on the stack. Changed chunks are tracked in a 16-byte bitmap.
+// Peak stack drops from ~1.3 KB to ~40 bytes, at the cost of
+// transforming each transmitted chunk twice (negligible next to the
+// blocking UART transfer).
 static uint8_t previousHash[128];
 static uint8_t forcedBlock = 0;
 static uint8_t keepAlive = 3;
@@ -65,24 +71,35 @@ static void SCREENSHOT_Send(const uint8_t *buf, uint16_t len)
     }
 }
 
-void SCREENSHOT_Line(uint8_t *src, uint8_t *dest, uint16_t *idx) {
-    for (uint8_t b = 0; b < 8; b++) {
-        for (uint8_t i = 0; i < 128; i += 8) {
-            uint8_t acc = 0;
-            for (uint8_t k = 0; k < 8; k++) {
-                if (src[i + k] & (1 << b)) acc |= (1 << k);
-            }
-            dest[(*idx)++] = gSetting_set_inv ? ~acc : acc;
+enum {
+    SCREENSHOT_CHUNK_SIZE = 8,
+    SCREENSHOT_CHUNKS_PER_LINE = 16,
+    SCREENSHOT_HALF_LINE_COLUMNS = LCD_WIDTH / 2,
+};
+
+// Compute one 8-byte output chunk directly from the display buffers.
+// Frame layout: per line (status + 7 frame lines), 8 bit layers of
+// 16 bytes each. Each bit layer is split into two 64-column chunks.
+static void SCREENSHOT_Chunk(uint8_t chunkIdx, uint8_t *dest)
+{
+    const uint8_t chunkInLine = chunkIdx % SCREENSHOT_CHUNKS_PER_LINE;
+    const uint8_t line = chunkIdx / SCREENSHOT_CHUNKS_PER_LINE;
+    const uint8_t bit = chunkInLine / 2;
+    const uint8_t columnBase = (chunkInLine % 2) * SCREENSHOT_HALF_LINE_COLUMNS;
+    const uint8_t *src = (line == 0 ? gStatusLine : gFrameBuffer[line - 1])
+                         + columnBase;
+
+    for (uint8_t j = 0; j < SCREENSHOT_CHUNK_SIZE; j++) {
+        uint8_t acc = 0;
+        for (uint8_t k = 0; k < SCREENSHOT_CHUNK_SIZE; k++) {
+            if (src[j * SCREENSHOT_CHUNK_SIZE + k] & (1 << bit)) acc |= (1 << k);
         }
+        dest[j] = gSetting_set_inv ? ~acc : acc;
     }
 }
 
 void SCREENSHOT_Update(bool force)
 {
-    // Build frame in a temporary stack buffer
-    // This is 1024 bytes but it's temporary and gets freed after the function
-    uint8_t frameBuffer[1024];
-    uint16_t index = 0;
     static bool wasConnected = false;
 
     if (SCREENSHOT_IsLocked())
@@ -104,33 +121,19 @@ void SCREENSHOT_Update(bool force)
         wasConnected = true;
     }
 
-    // ==== BUILD FRAME ONCE ====
-    // Status line: 8 bit layers × 128 columns
-    SCREENSHOT_Line(gStatusLine, frameBuffer, &index);
-
-    // Frame buffer: 7 lines × 8 bit layers × 128 columns
-    for (uint8_t l = 0; l < 7; l++) {
-        SCREENSHOT_Line(gFrameBuffer[l], frameBuffer, &index);
-    }
-
-    if (index != 1024)
-        return;
-
     // ==== FIRST PASS: Count changed chunks ====
     uint16_t deltaLen = 0;
-    uint8_t changedChunks[128];  // List of changed chunk indices
-    uint8_t newHash[128];        // Fingerprints of the current frame
-    uint8_t changedCount = 0;
+    uint8_t changedBitmap[16] = {0};  // 1 bit per chunk
+    uint8_t chunk[9];                 // [0] = index, [1..8] = payload
 
-    for (uint8_t chunk = 0; chunk < 128; chunk++) {
-        newHash[chunk] = SCREENSHOT_Hash(&frameBuffer[chunk * 8]);
+    for (uint8_t chunkIdx = 0; chunkIdx < 128; chunkIdx++) {
+        SCREENSHOT_Chunk(chunkIdx, &chunk[1]);
 
-        bool changed = newHash[chunk] != previousHash[chunk];
-        bool isForced = (chunk == forcedBlock);
-        bool fullUpdate = force;
+        bool changed = SCREENSHOT_Hash(&chunk[1]) != previousHash[chunkIdx];
+        bool isForced = (chunkIdx == forcedBlock);
 
-        if (changed || isForced || fullUpdate) {
-            changedChunks[changedCount++] = chunk;
+        if (changed || isForced || force) {
+            changedBitmap[chunkIdx >> 3] |= 1 << (chunkIdx & 7);
             deltaLen += 9;
         }
     }
@@ -161,19 +164,20 @@ void SCREENSHOT_Update(bool force)
     SCREENSHOT_Send(header, 5);
 
     // ==== SECOND PASS: Send only changed chunks ====
-    uint8_t chunk[9];
-    
-    for (uint8_t i = 0; i < changedCount; i++) {
-        uint8_t chunkIdx = changedChunks[i];
+    for (uint8_t chunkIdx = 0; chunkIdx < 128; chunkIdx++) {
+        if (!(changedBitmap[chunkIdx >> 3] & (1 << (chunkIdx & 7))))
+            continue;
 
         chunk[0] = chunkIdx;
-        memcpy(&chunk[1], &frameBuffer[chunkIdx * 8], 8);
+        SCREENSHOT_Chunk(chunkIdx, &chunk[1]);
 
         SCREENSHOT_Send(chunk, 9);
 
         // Update the fingerprint only once the chunk is actually sent,
-        // so chunks skipped by an early return stay marked as changed
-        previousHash[chunkIdx] = newHash[chunkIdx];
+        // so chunks skipped by an early return stay marked as changed.
+        // Hashing the recomputed payload also keeps the fingerprint in
+        // sync if the display buffer changed between the two passes.
+        previousHash[chunkIdx] = SCREENSHOT_Hash(&chunk[1]);
     }
 
     uint8_t end = 0x0A;
