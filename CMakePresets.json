@@ -212,7 +212,17 @@
                 "EDITION_STRING": "Fusion",
                 "TARGET": "f4hwn.fusion"
             }
-        }
+        },
+        {
+            "name": "BadApple",
+            "inherits": "Fusion",
+            "cacheVariables": {
+                "ENABLE_FEAT_F4HWN_GAME": false,
+                "ENABLE_PLAYER": true,
+                "EDITION_STRING": "BadApple",
+                "TARGET": "badapple-firmware"
+             }
+         }
     ],
     "buildPresets": [
         {
@@ -242,6 +252,10 @@
         {
             "name": "Fusion",
             "configurePreset": "Fusion"
+        },
+        {
+            "name": "BadApple",
+            "configurePreset": "BadApple"
         }
     ]
 }

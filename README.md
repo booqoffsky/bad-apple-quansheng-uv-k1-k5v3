@@ -1,7 +1,110 @@
-# Stats
+# Quansheng UV-K1/K5V3 Custom Firmware (Bad Apple!! Version)
+>Custom firmware for the Quansheng UV-K1 / UV-K5V3 radios, based on [armel/uv-k1-k5v3-firmware-custom](https://github.com/armel/uv-k1-k5v3-firmware-custom), featuring the iconic "Bad Apple!!" animation (3m 39s) with a chip-generated melody playback.
 
-![Alt](https://repobeats.axiom.co/api/embed/ecdd86aa536b716f088339a0c5ee734558f78c28.svg "Repobeats analytics image")
+![Bad Apple Preview](images/demo.gif)
 
+_Preserves full stock functionality of Fusion 5.6.0, with the built-in game swapped out for a media player._
+
+## 💾 Installation Guide
+
+Follow these steps to flash the firmware and upload the Bad Apple!! animation data to your radio.
+
+### Step 1: Flash the Firmware
+The pre-compiled custom firmware binary is located in this repository at:
+`bin/firmware.bin`
+
+1. Put your radio into bootloader mode (hold the **PTT** button while turning the radio on). The flashlight LED will light up.
+2. Connect your radio to your PC using the USB programming cable.
+3. Open the web flasher tool: [UV-K5 V3 & UV-K1 Web Tool (uvtools2)](https://armel.github.io/uvtools2/?mode=flash)
+4. Select your COM port, choose the pre-compiled firmware file, and click **Flash firmware**.
+
+> **(Optional)**
+> If you want to compile the firmware yourself, simply run:
+> 
+> ```bash
+> ./compile-with-docker.sh BadApple
+> ```
+
+
+
+### Step 2: Upload Video Data
+After flashing, turn your radio on. The internal memory is too small to hold the video data, so the animation must be written separately into the external EEPROM storage.
+
+Data is written to an unused flash memory area starting from sector `0x012000`.
+
+1. Locate the animation data file at: `bin/bad_apple_24fps.bin`
+2. Connect your powered-on radio to the PC.
+3. Run the upload script via your terminal to transfer the animation data into the external memory (ensure `pyserial` is available):
+   ```bash
+   python3 -m tools.player.flash --port /dev/ttyACM0 ./bin/bad_apple_24fps.bin
+   ```
+
+---
+
+> **(Note)** 
+>Your actual port may vary depending on your OS:
+> * **Linux:** `/dev/ttyUSB0` or `/dev/ttyACM0`
+> * **macOS:** `/dev/cu.usbserial-XXXX` or `/dev/cu.wchusbserialXXXX`
+> * **Windows:** `COM1`, `COM2`, `COM3`, etc. (Check *Device Manager* to find the correct number)
+
+
+> **(Optional)**
+> If you want to compress the video and generate the animation binary file yourself from the original source, use the provided tools in sequence:
+> 
+> 1. Extract and convert video frames to monochrome images:
+>    ```bash
+>    ./tools/player/extract_frames_from_video.sh
+>    ```
+> 2. Pack the converted frames into the final RLE binary:
+>    ```bash
+>    python tools/player/pack_frames.py
+>    ```
+
+### Step 3: Run!
+Once the firmware is flashed and the animation data is successfully written to the EEPROM, you can trigger the playback directly from your radio interface:
+
+1. Press **`#`** and **`7`** keys.
+
+
+## 🔬 Technical Details
+### Audio Encoding 
+The melody is completely **hardcoded directly into the firmware** as a sequence of C-structures (see `App/app/melody.h` and `App/app/melody.c`). 
+
+MIDI arrangement sourced from: https://github.com/cnlohr/badderapple/blob/master/song/badderapple.mid
+
+### Video Encoding & Frame Compression
+
+To optimize storage space and display performance, individual animation frames (monochrome PNG, 128x64 pixels) are processed and compressed using the following method:
+
+1. **Display Mapping:** Each frame is converted into the native **ST7565 page-major format**. A single uncompressed frame takes exactly `1024` bytes (8 pages × 128 vertical columns), where Bit 0 represents the topmost pixel of the page, and a value of `1` represents a dark pixel.
+
+2. **RLE Compression Schema:** The page-major byte array is compressed using a Run-Length Encoding (RLE) algorithm. The data is encoded as a continuous stream of `[count, value]` byte pairs:
+   * `count`: A single byte (`0..255`) specifying the run length.
+   * `value`: A single byte specifying the pixel data to repeat.
+   * *Note: Runs longer than 255 bytes are automatically split into multiple pairs.*
+3. **Serialization:** All compressed frames are packed into a single consolidated binary data file.
+
+### Animation Binary File Format
+
+All multi-byte fields use the **little-endian** byte order.
+
+| Offset | Size (Bytes) | Field Name | Description |
+| :--- | :--- | :--- | :--- |
+| `0x0000` | 4 | `magic` | Magic signature bytes, strictly equal to `0x0BADCAFE` |
+| `0x0004` | 4 | `version` | File format version, currently set to `1` |
+| `0x0008` | 4 | `frame_count` | Total number of frames in the animation ($N$, e.g., `5258`) |
+| `0x000C` | $4 \times (N+1)$ | `offset_table` | Array of absolute file offsets for each compressed frame. `offset[0]` points to the start of the `rle_blob`, and `offset[N]` points to the end of the last frame (which equals total image size). |
+| `0x000C + 4×(N+1)` | *Variable* | `rle_blob` | The raw, sequential stream of compressed RLE frame bytes. |
+
+## ⚖️ Credits & Legal Disclaimer
+
+This is a fan-made project created purely for educational and entertainment purposes. It is strictly non-commercial and complies with the [Touhou Project Fan Creator Guidelines](https://touhou-project.news/guidelines_en/).
+
+* **Original Music Theme:** ZUN (Team Shanghai Alice)
+* **Music Remix/Arrangement:** Alstroemeria Records (Masayoshi Minoshima feat. nomico)
+* **Video Animation (Shadow Art PV):** Anira (あにら)
+
+# Original README
 # F4HWN firmware port for the UV-K1 and UV-K5 V3 using the PY32F071 MCU
 
 This repository is a fork of the [F4HWN custom firmware](https://github.com/armel/uv-k5-firmware-custom), who was a fork of [Egzumer custom firmware](https://github.com/egzumer/uv-k5-firmware-custom). It extends the work done for the UV-K5 V1, based on the DP32G030 MCU, and adapts it to the newer UV-K1 and UV-K5 V3 built around the PY32F071 MCU. It is the result of the joint work of [@muzkr](https://github.com/muzkr) and [@armel](https://github.com/armel).

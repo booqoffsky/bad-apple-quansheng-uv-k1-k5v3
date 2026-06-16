@@ -143,6 +143,11 @@ enable_feature(ENABLE_FLASHLIGHT
 
 # ---- CUSTOM MODS ----
 
+enable_feature(ENABLE_PLAYER
+    app/player.c
+    app/melody.c
+)
+
 enable_feature(ENABLE_SPECTRUM
     app/spectrum.c
 )
@@ -223,6 +228,9 @@ if(ENABLE_FEAT_F4HWN_LOGO_SAV AND NOT ENABLE_FEAT_F4HWN_LOGO)
     message(FATAL_ERROR "ENABLE_FEAT_F4HWN_LOGO_SAV requires ENABLE_FEAT_F4HWN_LOGO.")
 endif()
 
+if(ENABLE_PLAYER AND ENABLE_FEAT_F4HWN_GAME)
+    message(FATAL_ERROR "Incompatible options selected. Please disable either ENABLE_PLAYER or ENABLE_FEAT_F4HWN_GAME.")
+endif()
 # ---- DEBUGGING ----
 
 enable_feature(ENABLE_AGC_SHOW_DATA)

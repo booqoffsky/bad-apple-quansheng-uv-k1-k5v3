@@ -45,6 +45,8 @@
 #include "settings.h"
 #include "version.h"
 
+#include "driver/py25q16.h"
+
 #if defined(ENABLE_OVERLAY)
     #include "sram-overlay.h"
 #endif
@@ -158,6 +160,67 @@ typedef struct {
     Header_t Header;
     uint32_t Timestamp;
 } CMD_052F_t;
+#endif
+
+#ifdef ENABLE_PLAYER
+// --- Bulk flash access (PY25Q16) ---
+// 0x0530: erase a run of 4 KiB sectors.
+// 0x0531: write a chunk (up to 240 bytes) at a 24-bit PY25Q16 address.
+// 0x0532: read a chunk (up to 128 bytes) at a 24-bit PY25Q16 address.
+// All gated on ENABLE_PLAYER and the same session Timestamp as 0x051D.
+#define FLASH_BULK_MAX_READ_LEN 128
+#define FLASH_BULK_MAX_WRITE_LEN 240
+
+typedef struct {
+    Header_t Header;
+    uint32_t Address;
+    uint32_t SectorCount;
+    uint32_t Timestamp;
+} CMD_0530_t;
+
+typedef struct {
+    Header_t Header;
+    struct {
+        uint32_t Address;
+        uint32_t SectorCount;
+    } Data;
+} REPLY_0530_t;
+
+typedef struct {
+    Header_t Header;
+    uint32_t Address;
+    uint16_t Size;
+    uint8_t  Padding[2];
+    uint32_t Timestamp;
+    uint8_t  Data[0];
+} CMD_0531_t;
+
+typedef struct {
+    Header_t Header;
+    struct {
+        uint32_t Address;
+        uint16_t Size;
+        uint8_t  Padding[2];
+    } Data;
+} REPLY_0531_t;
+
+typedef struct {
+    Header_t Header;
+    uint32_t Address;
+    uint16_t Size;
+    uint8_t  Padding[2];
+    uint32_t Timestamp;
+} CMD_0532_t;
+
+typedef struct {
+    Header_t Header;
+    struct {
+        uint32_t Address;
+        uint16_t Size;
+        uint8_t  Padding[2];
+        uint8_t  Data[FLASH_BULK_MAX_READ_LEN];
+    } Data;
+} REPLY_0532_t;
 #endif
 
 static const uint8_t Obfuscation[16] =
@@ -638,6 +701,93 @@ static void CMD_0602_WriteBK4819Reg(const uint8_t *pBuffer)
 }
 #endif
 
+#ifdef ENABLE_PLAYER
+// Resolve the per-port session timestamp. Returns 0 (and thus rejects the
+// command) if the port is disabled.
+static uint32_t GetPortTimestamp(uint32_t Port)
+{
+    if (0) {}
+#if defined(ENABLE_UART)
+    else if (Port == UART_PORT_UART)
+        return UART_Timestamp;
+#endif
+#if defined(ENABLE_USB)
+    else if (Port == UART_PORT_VCP)
+        return VCP_Timestamp;
+#endif
+    return 0;
+}
+
+// 0x0530: erase SectorCount consecutive 4 KiB sectors starting at Address.
+static void CMD_0530(uint32_t Port, const uint8_t *pBuffer)
+{
+    const CMD_0530_t *pCmd = (const CMD_0530_t *)pBuffer;
+    REPLY_0530_t Reply;
+
+    memset(&Reply, 0, sizeof(Reply));
+    Reply.Header.ID   = 0x0530;
+    Reply.Header.Size = sizeof(Reply.Data);
+    Reply.Data.Address      = pCmd->Address;
+    Reply.Data.SectorCount  = pCmd->SectorCount;
+
+    if (pCmd->Timestamp != GetPortTimestamp(Port))
+        return;
+
+    gSerialConfigCountDown_500ms = 12; // keep serial config mode alive during long erase
+
+    for (uint32_t i = 0; i < pCmd->SectorCount; i++)
+        PY25Q16_SectorErase(pCmd->Address + i * 0x1000u);
+
+    SendReply(Port, &Reply, sizeof(Reply));
+}
+
+// 0x0531: write a chunk of up to FLASH_BULK_MAX_WRITE_LEN bytes at Address.
+static void CMD_0531(uint32_t Port, const uint8_t *pBuffer)
+{
+    const CMD_0531_t *pCmd = (const CMD_0531_t *)pBuffer;
+    REPLY_0531_t Reply;
+
+    memset(&Reply, 0, sizeof(Reply));
+    Reply.Header.ID   = 0x0531;
+    Reply.Header.Size = sizeof(Reply.Data);
+    Reply.Data.Address = pCmd->Address;
+    Reply.Data.Size    = pCmd->Size;
+
+    if (pCmd->Timestamp != GetPortTimestamp(Port))
+        return;
+    if (pCmd->Size == 0 || pCmd->Size > FLASH_BULK_MAX_WRITE_LEN)
+        return;
+
+    gSerialConfigCountDown_500ms = 12;
+
+    PY25Q16_WriteBuffer(pCmd->Address, pCmd->Data, pCmd->Size, false);
+
+    SendReply(Port, &Reply, sizeof(Reply));
+}
+
+// 0x0532: read a chunk of up to FLASH_BULK_MAX_READ_LEN bytes at Address.
+static void CMD_0532(uint32_t Port, const uint8_t *pBuffer)
+{
+    const CMD_0532_t *pCmd = (const CMD_0532_t *)pBuffer;
+    REPLY_0532_t Reply;
+
+    memset(&Reply, 0, sizeof(Reply));
+    Reply.Header.ID   = 0x0532;
+    Reply.Header.Size = sizeof(Reply.Data);
+    Reply.Data.Address = pCmd->Address;
+    Reply.Data.Size    = pCmd->Size;
+
+    if (pCmd->Timestamp != GetPortTimestamp(Port))
+        return;
+    if (pCmd->Size == 0 || pCmd->Size > FLASH_BULK_MAX_READ_LEN)
+        return;
+
+    PY25Q16_ReadBuffer(pCmd->Address, Reply.Data.Data, pCmd->Size);
+
+    SendReply(Port, &Reply, sizeof(Reply.Header) + 4 + 2 + 2 + pCmd->Size);
+}
+#endif
+
 bool UART_IsCommandAvailable(uint32_t Port)
 {
     uint16_t Index;
@@ -851,6 +1001,20 @@ void UART_HandleCommand(uint32_t Port)
                 NVIC_SystemReset();
             #endif
             break;
+
+#ifdef ENABLE_PLAYER
+        case 0x0530:
+            CMD_0530(Port, pUART_Command->Buffer);
+            break;
+
+        case 0x0531:
+            CMD_0531(Port, pUART_Command->Buffer);
+            break;
+
+        case 0x0532:
+            CMD_0532(Port, pUART_Command->Buffer);
+            break;
+#endif
 
 #ifdef ENABLE_UART_RW_BK_REGS
         case 0x0601:

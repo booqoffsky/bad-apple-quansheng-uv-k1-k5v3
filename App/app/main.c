@@ -35,6 +35,10 @@
 #include "app/breakout.h"
 #endif
 
+#ifdef ENABLE_PLAYER
+#include "app/player.h"
+#endif
+
 #include "audio.h"
 #include "board.h"
 #include "driver/bk4819.h"
@@ -262,6 +266,11 @@ static void processFKeyFunction(const KEY_Code_t Key, const bool beep)
             break;
 
         case KEY_7:
+#ifdef ENABLE_PLAYER
+            if (!beep) {
+                APP_RunVideo();
+            } else {
+#endif
 #ifdef ENABLE_FEAT_F4HWN_GAME
             if (!beep) {
                 APP_RunBreakout();
@@ -273,6 +282,9 @@ static void processFKeyFunction(const KEY_Code_t Key, const bool beep)
 //              toggle_chan_scanlist();
 #endif
 #ifdef ENABLE_FEAT_F4HWN_GAME
+            }
+#endif
+#ifdef ENABLE_PLAYER
             }
 #endif
 
